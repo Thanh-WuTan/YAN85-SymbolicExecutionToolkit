@@ -1,7 +1,7 @@
 import angr
 import claripy
 
-class SymbolicAnalyzer:
+class SymbolicAnalyzerV0:
     def __init__(self, binary_loader):
         self.binary_loader = binary_loader
         self.project = binary_loader.project 
