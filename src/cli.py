@@ -1,7 +1,8 @@
 import argparse
 import os
 from .binary_loader import BinaryLoader
-from .symbolic_analyzer_v0 import SymbolicAnalyzer
+from .symbolic_analyzer_v0 import SymbolicAnalyzerV0
+from .symbolic_analyzer_v1 import SymbolicAnalyzerV1
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="YAN85 Symbolic Execution Toolkit")
@@ -21,10 +22,12 @@ def main():
             print(f"Running in Analysis Mode:")
             print(f"  Binary: {args.binary}")
             loader = BinaryLoader(args.binary)
-            loader.print_symbols()
             
             # Call symbolic_analyzer to analyze binary
-            analyzer = SymbolicAnalyzer(loader)
+            if loader.is_v0:
+                analyzer = SymbolicAnalyzerV0(loader)
+            else:
+                analyzer = SymbolicAnalyzerV1(loader) 
             analyzer.run_analysis()
         elif args.shellcode and args.identifiers and not args.binary:
             # Generation Mode: -s and -i
