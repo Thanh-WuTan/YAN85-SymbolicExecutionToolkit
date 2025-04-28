@@ -5,7 +5,7 @@ class SymbolicAnalyzerV0:
     def __init__(self, binary_loader):
         self.binary_loader = binary_loader
         self.project = binary_loader.project 
-        self.symbols = binary_loader.get_symbols()  
+        self.symbols = binary_loader.symbols
 
     def identify_registers(self, result):
         print("\n[+] Identifying registers using concrete execution...")
@@ -246,10 +246,7 @@ class SymbolicAnalyzerV0:
                 )
 
                 # Initialize rdi memory
-                state.memory.store(0x2000000 + 1024, 0x0, size=1)
-                state.memory.store(0x2000000 + 1025, 0x0, size=1)
-                state.memory.store(0x2000000 + 1026, 0x10, size=1)
-                state.memory.store(0x2000000 + 768, 0x0, size=0x100)
+                state.memory.store(0x2000000, 0x0, size=1030)
 
                 simgr = self.project.factory.simgr(state)
                 simgr.explore(find=lambda s: s.addr in puts_addrs)
