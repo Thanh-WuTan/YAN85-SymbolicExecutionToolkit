@@ -14,4 +14,6 @@ pip install -r requirements.txt
 ```
 
 ## Usage
+```bash
 python scripts/run_yan85_tool.py -b /path/to/yan85_binary
+```
