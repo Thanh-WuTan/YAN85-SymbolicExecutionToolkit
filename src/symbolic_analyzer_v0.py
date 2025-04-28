@@ -234,12 +234,10 @@ class SymbolicAnalyzerV0:
 
             for val in possible_values:
                 rsi_val = val * (16 ** (2 * pos))
-                test_val = rsi_val | (0x10 << 16)  
-
                 state = self.project.factory.call_state(
                     interpret_sys_addr,
                     0x2000000,
-                    claripy.BVV(test_val, 32),
+                    claripy.BVV(rsi_val, 32),
                     add_options={
                         angr.options.ZERO_FILL_UNCONSTRAINED_MEMORY,
                         angr.options.ZERO_FILL_UNCONSTRAINED_REGISTERS,
@@ -261,7 +259,7 @@ class SymbolicAnalyzerV0:
                         for call in puts_calls:
                             if state.addr == call["addr"]:
                                 print(f"Found identifier for syscall '{call['syscall']}': {hex(val)}")
-                                result["syscall"][call["syscall"]] = rsi_val
+                                result["syscall"][call["syscall"]] = val
                                 break
 
             if result["syscall"]:
