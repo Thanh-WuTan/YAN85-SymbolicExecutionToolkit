@@ -1,7 +1,7 @@
 import argparse
 import os
 from .binary_loader import BinaryLoader
-from .symbolic_analyzer import SymbolicAnalyzer
+from .symbolic_analyzer_v0 import SymbolicAnalyzer
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="YAN85 Symbolic Execution Toolkit")
