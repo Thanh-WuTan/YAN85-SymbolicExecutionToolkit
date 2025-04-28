@@ -1,4 +1,5 @@
-import angr 
+import angr
+import claripy
 
 class SymbolicAnalyzer:
     def __init__(self, binary_loader):
@@ -142,6 +143,135 @@ class SymbolicAnalyzer:
         elif len(result["instruction"]) < len(valid_instructions):
             print(f"Warning: Only found {len(result["instruction"])} of {len(valid_instructions)} instructions.")
 
+    def identify_syscalls(self, result):
+        print("\n[+] Identifying syscall numbers using concrete execution...")
+
+        interpret_sys_addr = self.symbols.get("interpret_sys")
+        if interpret_sys_addr is None:
+            print("Error: 'interpret_sys' symbol not found.")
+            return
+
+        # Get puts PLT address
+        puts_addr = self.project.loader.main_object.plt.get("puts")
+        if puts_addr is None:
+            print("Error: 'puts' PLT address not found.")
+            return
+     
+        # Generate CFG for interpret_sys
+        try:
+            cfg = self.project.analyses.CFGEmulated(
+                fail_fast=True,
+                starts=[interpret_sys_addr],
+                max_steps=1000,
+                keep_state=True
+            )
+        except Exception as e:
+            print(f"Error generating CFG for interpret_sys: {e}")
+            return
+
+        interpret_sys_func = cfg.functions.get(interpret_sys_addr)
+        if not interpret_sys_func:
+            print("Error: Could not analyze interpret_sys function.")
+            return
+
+        
+        # Find puts calls
+        syscall_str_map = {
+            "[s] ... open": "open",
+            "[s] ... read_code": "read_code",
+            "[s] ... read_memory": "read_memory",
+            "[s] ... write": "write",
+            "[s] ... sleep": "sleep",
+            "[s] ... exit": "exit"
+        }
+
+        puts_calls = []
+        for block in interpret_sys_func.blocks:
+            try:
+                if block.vex.jumpkind == 'Ijk_Call' and block.vex.next.tag == 'Iex_Const':
+                    if block.vex.next.con.value == puts_addr:
+                        # Simulate to get rdi
+                        state = self.project.factory.blank_state(addr=block.addr)
+                        state.regs.rip = block.addr
+                        simgr = self.project.factory.simgr(state)
+                        simgr.step()
+                        if simgr.active:
+                            state = simgr.active[0]
+                            try:
+                                rdi_addr = state.solver.eval(state.regs.rdi)
+                                str_bytes = bytearray()
+                                for i in range(20):
+                                    byte = state.memory.load(rdi_addr + i, 1, endness=state.arch.memory_endness)
+                                    byte_val = state.solver.eval(byte)
+                                    if byte_val == 0:
+                                        break
+                                    str_bytes.append(byte_val)
+                                if str_bytes:
+                                    sys_str = str_bytes.decode('ascii', errors='ignore')
+                                    if any(key in sys_str for key in syscall_str_map):
+                                        syscall_name = next((v for k, v in syscall_str_map.items() if k in sys_str), None)
+                                        if syscall_name:
+                                            puts_calls.append({
+                                                "addr": block.addr,
+                                                "string": sys_str,
+                                                "syscall": syscall_name
+                                            })
+                            except (angr.errors.SimMemoryError, UnicodeDecodeError) as e:
+                                print(f"Error reading string at rdi=0x{rdi_addr:x} for puts at 0x{block.addr:x}: {e}")
+            except Exception as e:
+                print(f"Error analyzing block at 0x{block.addr:x}: {e}")
+
+        if not puts_calls:
+            print("Error: No puts calls found in interpret_sys.")
+            return
+        
+        # Test possible values
+        possible_values = [0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80]
+        puts_addrs = [call["addr"] for call in puts_calls]
+
+        for pos in range(3): 
+            result["syscall"].clear()
+
+            for val in possible_values:
+                rsi_val = val * (16 ** (2 * pos))
+                test_val = rsi_val | (0x10 << 16)  
+
+                state = self.project.factory.call_state(
+                    interpret_sys_addr,
+                    0x2000000,
+                    claripy.BVV(test_val, 32),
+                    add_options={
+                        angr.options.ZERO_FILL_UNCONSTRAINED_MEMORY,
+                        angr.options.ZERO_FILL_UNCONSTRAINED_REGISTERS,
+                        angr.options.SIMPLIFY_MEMORY_READS
+                    }
+                )
+
+                # Initialize rdi memory
+                state.memory.store(0x2000000 + 1024, 0x0, size=1)
+                state.memory.store(0x2000000 + 1025, 0x0, size=1)
+                state.memory.store(0x2000000 + 1026, 0x10, size=1)
+                state.memory.store(0x2000000 + 768, 0x0, size=0x100)
+
+                simgr = self.project.factory.simgr(state)
+                simgr.explore(find=lambda s: s.addr in puts_addrs)
+
+                if simgr.found:
+                    for state in simgr.found:
+                        for call in puts_calls:
+                            if state.addr == call["addr"]:
+                                print(f"Found identifier for syscall '{call['syscall']}': {hex(val)}")
+                                result["syscall"][call["syscall"]] = rsi_val
+                                break
+
+            if result["syscall"]:
+                result["opcode-order"]["arg1"] = pos
+                break
+
+        if not result["syscall"]:
+            print("Error: No syscall identifiers found.")
+        elif len(result["syscall"]) < len(syscall_str_map):
+            print(f"Warning: Only found {len(result['syscall'])} of {len(syscall_str_map)} syscalls.")
 
     def run_analysis(self):
         """
@@ -156,6 +286,8 @@ class SymbolicAnalyzer:
         }
         self.identify_registers(result)
         self.identify_instructions(result)
+        self.identify_syscalls(result)
         print(result['register'])
         print(result['instruction'])
+        print(result['syscall'])
         print(result['opcode-order'])
