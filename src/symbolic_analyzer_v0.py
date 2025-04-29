@@ -1,6 +1,9 @@
 import angr
 import claripy
+import os
+import yaml
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 class SymbolicAnalyzerV0:
     def __init__(self, binary_loader):
         self.binary_loader = binary_loader
@@ -12,10 +15,8 @@ class SymbolicAnalyzerV0:
 
         # Get address of describe_register
         describe_register_addr = self.symbols.get("describe_register")
-        if describe_register_addr is None:
-            print("Error: 'describe_register' symbol not found.")
-            return
-        
+        assert(describe_register_addr)
+
         char_to_reg = {
             0x61: "a",
             0x62: "b",
@@ -147,9 +148,7 @@ class SymbolicAnalyzerV0:
         print("\n[+] Identifying syscall numbers using concrete execution...")
 
         interpret_sys_addr = self.symbols.get("interpret_sys")
-        if interpret_sys_addr is None:
-            print("Error: 'interpret_sys' symbol not found.")
-            return
+        assert(interpret_sys_addr)
 
         # Get puts PLT address
         puts_addr = self.project.loader.main_object.plt.get("puts")
@@ -268,21 +267,76 @@ class SymbolicAnalyzerV0:
         elif len(result["syscall"]) < len(syscall_str_map):
             print(f"Warning: Only found {len(result['syscall'])} of {len(syscall_str_map)} syscalls.")
 
+    def identify_flags(self, result):
+        print("\n[+] Identifying flags using concrete execution...")
+        describe_flags_addr = self.symbols.get("describe_flags")
+        assert(describe_flags_addr)
+        edi_values = [0x0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80]
+        
+        for edi in edi_values:
+            # Create a dummy return address
+            dummy_ret_addr = 0xdeadbeef
+            # Create initial state with edi set to the test value
+            state = self.project.factory.call_state(
+                describe_flags_addr,
+                claripy.BVV(edi, 32),  # edi (32-bit, treated as byte in function)
+                ret_addr=dummy_ret_addr,
+                add_options={
+                    angr.options.ZERO_FILL_UNCONSTRAINED_MEMORY,
+                    angr.options.ZERO_FILL_UNCONSTRAINED_REGISTERS
+                }
+            )
+
+            simgr = self.project.factory.simgr(state)
+            simgr.explore(find=dummy_ret_addr)
+
+            if simgr.found:
+                state = simgr.found[0]
+                rax = state.regs.rax
+                rax_addr = state.solver.eval(rax, cast_to=int)
+                try:
+                    str_bytes = bytearray()
+                    byte = state.memory.load(rax_addr, 1, endness=state.arch.memory_endness)
+                    byte_val = state.solver.eval(byte)
+                    if byte_val:
+                        str_bytes.append(byte_val)
+                    if str_bytes:
+                        flag_string = str_bytes.decode('ascii', errors='ignore')
+                        print(f"Found identifier for flag '{flag_string}': 0x{edi:x}")
+                        result["flag"][flag_string] = edi
+                except (angr.errors.SimMemoryError, UnicodeDecodeError) as e:
+                    print(f"Error reading flag string at rax=0x{rax_addr:x} for edi=0x{edi:x}: {e}")
+            else:
+                print(f"No state found for edi=0x{edi:x}")
+        
+    def save_result(self, result):
+        print("\n[+] Saving result to YAML file...")
+        output_dir = os.path.join(BASE_DIR, "result")
+        os.makedirs(output_dir, exist_ok=True)  # Create 'result' directory if it doesn't exist
+
+        output_file = os.path.join(output_dir, f"{self.binary_loader.binary_name}.yml")
+
+        try:
+            with open(output_file, "w") as f:
+                yaml.safe_dump(result, f, sort_keys=False, default_flow_style=False)
+            print(f"[+] Result saved to {output_file}")
+        except Exception as e:
+            print(f"[!] Error writing result to {output_file}: {e}")
+            
     def run_analysis(self):
         """
         Perform symbolic analysis on the loaded binary.
         """
         result = {
-            "register": {},
+            "opcode-order": {},
             "instruction": {},
-            "syscall": {},
+            "register": {},
             "flag": {},
-            "opcode-order": {}
+            "syscall": {},
         }
         self.identify_registers(result)
         self.identify_instructions(result)
         self.identify_syscalls(result)
-        print(result['register'])
-        print(result['instruction'])
-        print(result['syscall'])
-        print(result['opcode-order'])
+        self.identify_flags(result)
+
+        self.save_result(result)
