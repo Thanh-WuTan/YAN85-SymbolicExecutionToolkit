@@ -51,10 +51,8 @@ class BinaryLoader:
         missing_symbols = self.REQUIRED_SYMBOLS_V0 - self.symbols.keys()
         if missing_symbols:
             self.symbols = {}
-            print("Given binary is v1")
             return False
         else:
-            print("Given binary is v0")
             return True
     
     def _construct_dict_symbols(self):
