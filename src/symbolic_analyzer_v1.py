@@ -1,11 +1,10 @@
 import claripy
 import angr
+from src.symbolic_analyzer_base import SymbolicAnalyzer
 
-class SymbolicAnalyzerV1:
+class SymbolicAnalyzerV1(SymbolicAnalyzer):
     def __init__(self, binary_loader):
-        self.binary_loader = binary_loader
-        self.symbols = binary_loader.symbols
-        self.project = binary_loader.project
+        super().__init__(binary_loader)
 
     def _get_interpret_funcs(self):
         # Heuristic to find interpret_instruction function

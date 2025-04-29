@@ -2,13 +2,11 @@ import angr
 import claripy
 import os
 import yaml
+from src.symbolic_analyzer_base import SymbolicAnalyzer
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-class SymbolicAnalyzerV0:
+class SymbolicAnalyzerV0(SymbolicAnalyzer):
     def __init__(self, binary_loader):
-        self.binary_loader = binary_loader
-        self.project = binary_loader.project 
-        self.symbols = binary_loader.symbols
+        super().__init__(binary_loader)
 
     def identify_registers(self, result):
         print("\n[+] Identifying registers using concrete execution...")
@@ -308,20 +306,7 @@ class SymbolicAnalyzerV0:
                     print(f"Error reading flag string at rax=0x{rax_addr:x} for edi=0x{edi:x}: {e}")
             else:
                 print(f"No state found for edi=0x{edi:x}")
-        
-    def save_result(self, result):
-        print("\n[+] Saving result to YAML file...")
-        output_dir = os.path.join(BASE_DIR, "result")
-        os.makedirs(output_dir, exist_ok=True)  # Create 'result' directory if it doesn't exist
-
-        output_file = os.path.join(output_dir, f"{self.binary_loader.binary_name}.yml")
-
-        try:
-            with open(output_file, "w") as f:
-                yaml.safe_dump(result, f, sort_keys=False, default_flow_style=False)
-            print(f"[+] Result saved to {output_file}")
-        except Exception as e:
-            print(f"[!] Error writing result to {output_file}: {e}")
+    
             
     def run_analysis(self):
         """
