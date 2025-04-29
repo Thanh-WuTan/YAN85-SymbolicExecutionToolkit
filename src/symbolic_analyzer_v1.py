@@ -1,12 +1,32 @@
 import claripy
 import angr
 from src.symbolic_analyzer_base import SymbolicAnalyzer
+OFFSET_TO_REG = {
+        1024: "a",
+        1025: "b",
+        1026: "c",
+        1027: "d",
+        1028: "s",
+        1029: "i",
+        1030: "f"
+    }
 
+REG_TO_OFFSET = {
+    "a": 1024,
+    "b": 1025,
+    "c": 1026,
+    "d": 1027,
+    "s": 1028,
+    "i": 1029,
+    "f": 1030,
+}
 class SymbolicAnalyzerV1(SymbolicAnalyzer):
+    
     def __init__(self, binary_loader):
         super().__init__(binary_loader)
 
-    def _get_interpret_funcs(self):
+    def get_interpret_funcs(self):
+        print("\n[+] Recovering interpret functions")
         # Heuristic to find interpret_instruction function
         target_size = 0xff
         closest_size_diff = float('inf')
@@ -21,7 +41,7 @@ class SymbolicAnalyzerV1(SymbolicAnalyzer):
         if not interpret_instruction_addr:
             raise ValueError("Cannot find interpret_instruction function.")
         self.symbols['interpret_instruction'] = self.symbols.pop(f'sub_{interpret_instruction_addr:x}')
-
+        print(f"Heursitically found interpret_instruction at 0x{interpret_instruction_addr:x}")
         interpret_funcs = set()
         for start, end in self.binary_loader.potential_functions:
             if start == interpret_instruction_addr:
@@ -48,18 +68,17 @@ class SymbolicAnalyzerV1(SymbolicAnalyzer):
         return interpret_funcs
 
     def identify_instructions(self, result, interpret_funcs):
+        
         interpret_instruction_addr = self.symbols.get("interpret_instruction")
         if not interpret_instruction_addr:
             print("Error: interpret_instruction symbol not found.")
             return
 
 
-        tmp_result_instruction = {}
-        # List of rsi values to test
+        tmp_result_instruction = {} 
         rsi_values = [0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80]
-
-        # Dictionary to map function addresses to names for quick lookup
         func_addr_to_name = {addr: name for name, addr in interpret_funcs}
+
         for pos in range(3):
             for rsi_val in rsi_values:
                 # Create a dummy return address
@@ -116,67 +135,206 @@ class SymbolicAnalyzerV1(SymbolicAnalyzer):
                 result["opcode-order"]["ins"] = pos
                 break 
         
-        def find_interpret_imm(tmp_result_instruction):
-            offset_to_register = {
-                1024: "a",
-                1025: "b",
-                1026: "c",
-                1027: "d",
-                1028: "s",
-                1029: "i",
-                1030: "f"
-            }
-            for interpret_func_addr, identifier in tmp_result_instruction.items():
+    
+
+        def construct_arg(ins_pos, arg1_pos, arg2_pos, ins, arg1, arg2):
+            arg_bytes = [0] * 3
+            arg_bytes[ins_pos] = ins
+            arg_bytes[arg1_pos] = arg1
+            arg_bytes[arg2_pos] = arg2
+            return arg_bytes[0] | (arg_bytes[1] << 8) | (arg_bytes[2] << 16)
+
+        def simulate(function, rdi, rsi, init_register, init_memory):
+            dummy_ret_addr = 0xdeadbeef 
+            state = self.project.factory.call_state(
+                function,
+                rdi,
+                rsi,
+                ret_addr=dummy_ret_addr,
+                add_options={
+                    angr.options.ZERO_FILL_UNCONSTRAINED_MEMORY,
+                    angr.options.ZERO_FILL_UNCONSTRAINED_REGISTERS
+                }
+            )
+            state.memory.store(rdi, 0x0, size=1030)
+            for reg, val in init_register.items():
+                state.memory.store(rdi + REG_TO_OFFSET[reg], val, 1)
+            for (offset, val) in init_memory:
+                state.memory.store(rdi + offset, val, 1)
+            simgr = self.project.factory.simgr(state)
+            simgr.explore(find=dummy_ret_addr)
+            return simgr
+
+        def get_mem_byte_val(state, base, offset):
+            mem_byte = state.memory.load(base + offset, 1)
+            return state.solver.eval(mem_byte)
+
+        def identify_register():
+            # Identify register by finding interpret_imm symbol 
+            for interpret_imm, imm in tmp_result_instruction.items():
                 ins_pos = result["opcode-order"].get("ins")
                 rem_pos = {0, 1, 2} - {ins_pos}
                 arg2 = 0xcc
                 for arg1_pos in rem_pos:
                     arg2_pos = 3 - arg1_pos - ins_pos
                     for arg1 in [0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80]:
-                        rsi_bytes = [0] * 3  # three positions: 0, 1, 2
-                        rsi_bytes[ins_pos] = identifier
-                        rsi_bytes[arg1_pos] = arg1
-                        rsi_bytes[arg2_pos] = arg2
-
-                        # Now pack them into a 32-bit integer (little endian)
-                        rsi_val = rsi_bytes[0] | (rsi_bytes[1] << 8) | (rsi_bytes[2] << 16)
-
-                        dummy_ret_addr = 0xdeadbeef  # Arbitrary address not in the binary
-                        state = self.project.factory.call_state(
-                            interpret_func_addr,
-                            0x2000000,
-                            claripy.BVV(rsi_val, 32),
-                            ret_addr=dummy_ret_addr,
-                            add_options={
-                                angr.options.ZERO_FILL_UNCONSTRAINED_MEMORY,
-                                angr.options.ZERO_FILL_UNCONSTRAINED_REGISTERS
-                            }
-                        )
-                        state.memory.store(0x2000000, 0x0, size=1030)
-                        simgr = self.project.factory.simgr(state)
-                        simgr.explore(find=dummy_ret_addr)
-                        
+                        rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, imm, arg1, arg2)
+                        base_addr = 0x2000000
+                        simgr = simulate(interpret_imm, base_addr, claripy.BVV(rsi_val, 32), {}, {})
                         if simgr.found:
                             found_state = simgr.found[0]
-                            base_addr = 0x2000000
-
-                            # Now check a1[1024] to a1[1030]
                             for offset in range(1024, 1031):
-                                mem_byte = found_state.memory.load(base_addr + offset, 1)
-                                mem_byte_val = found_state.solver.eval(mem_byte)
-                                
+                                mem_byte_val = get_mem_byte_val(found_state, base_addr, offset)
                                 if mem_byte_val == 0xcc:
-                                    reg_name = offset_to_register[offset]
+                                    reg_name = OFFSET_TO_REG[offset]
                                     result["opcode-order"]["arg1"] = arg1_pos
                                     result["opcode-order"]["arg2"] = arg2_pos
-                                    result["instruction"]["imm"] = identifier
+                                    result["instruction"]["imm"] = imm
                                     result["register"][reg_name] = arg1
+                                    print(f"Found identifier for register '{reg_name}': 0x{arg1:x}")
                                     
                 if result["instruction"].get("imm") is not None:
-                    break   
+                    print(f"Found interpret_imm at 0x{interpret_imm:x}, with identifier 0x{imm:x}")
+                    tmp_result_instruction.pop(interpret_imm)
+                    self.binary_loader.symbols["interpret_imm"] = self.binary_loader.symbols.pop(f"sub_{interpret_imm:x}")
+                    return
+            
+            print("\n[!] Warning: Cannot find interpret_imm")
              
+        def find_interpret_add(ins_pos, arg1_pos, arg2_pos):
+            for interpret_add, add in tmp_result_instruction.items(): 
+                rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, add, result["register"]["a"], result["register"]["b"])
+                base_addr = 0x2000000 
+                init_register = {"a": 0xaa, "b": 0x2}
+                simgr = simulate(interpret_add, base_addr, claripy.BVV(rsi_val, 32), init_register, {})
+                if simgr.found:
+                    found_state = simgr.found[0]
+                    mem_byte_val = get_mem_byte_val(found_state, base_addr, REG_TO_OFFSET["a"])
+                    
+                    if mem_byte_val == init_register["a"] + init_register["b"]:
+                        print(f"Found interpret_add at 0x{interpret_add:x}, with identifier: 0x{add:x}")
+                        result["instruction"]["add"] = add 
+                        self.binary_loader.symbols["interpret_add"] = self.binary_loader.symbols.pop(f"sub_{interpret_add:x}")
+                        tmp_result_instruction.pop(interpret_add)
+                        return
+            print("\n[!] Warning: Cannot find interpret_add")
         
-        find_interpret_imm(tmp_result_instruction)
+        def find_interpret_stk(ins_pos, arg1_pos, arg2_pos):
+            for interpret_stk, stk in tmp_result_instruction.items(): 
+                rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, stk, 0, result["register"]["a"])
+                init_register = {"s": 0}
+                base_addr = 0x2000000
+                simgr = simulate(interpret_stk, base_addr, claripy.BVV(rsi_val, 32), init_register, {})
+                
+                if simgr.found:
+                    found_state = simgr.found[0]
+                    mem_byte_val = get_mem_byte_val(found_state, base_addr, REG_TO_OFFSET["s"])
+                    if mem_byte_val == 1:
+                        print(f"Found interpret_stk at 0x{interpret_stk:x}, with identifier: 0x{stk:x}")
+                        result["instruction"]["stk"] = stk
+                        self.binary_loader.symbols["interpret_stk"] = self.binary_loader.symbols.pop(f"sub_{interpret_stk:x}")
+                        tmp_result_instruction.pop(interpret_stk)
+                        return
+            print("\n[!] Warning: Cannot find interpret_stk")
+        
+        def find_interpret_stm(ins_pos, arg1_pos, arg2_pos):
+            for interpret_stm, stm in tmp_result_instruction.items():
+                rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, stm, result["register"]["a"], result["register"]["b"])
+                init_register = {"a": 0, "b": 0xcc}
+                base_addr = 0x2000000
+                simgr = simulate(interpret_stm, base_addr, claripy.BVV(rsi_val, 32), init_register, {})
+                if simgr.found:
+                    found_state = simgr.found[0]
+                    mem_byte_val = get_mem_byte_val(found_state, base_addr, 768)
+                    if mem_byte_val == init_register["b"]:
+                        print(f"Found interpret_stm at 0x{interpret_stm:x}, with identifier: 0x{stm:x}")
+                        result["instruction"]["stm"] = stm
+                        self.binary_loader.symbols["interpret_stm"] = self.binary_loader.symbols.pop(f"sub_{interpret_stm:x}")
+                        tmp_result_instruction.pop(interpret_stm)
+                        return
+            print("\n[!] Warning: Cannot find interpret_stm")
+                        
+        def find_interpret_ldm(ins_pos, arg1_pos, arg2_pos):
+            for interpret_ldm, ldm in tmp_result_instruction.items():
+                rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, ldm, result["register"]["a"], result["register"]["b"])
+                init_register = {"a": 0xbb, "b": 1}
+                init_memory = [(768 + 1, 0xcc)]
+                base_addr = 0x2000000
+                simgr = simulate(interpret_ldm, base_addr, claripy.BVV(rsi_val, 32), init_register, init_memory)
+                if simgr.found:
+                    found_state = simgr.found[0]
+                    mem_byte_val = get_mem_byte_val(found_state, base_addr, REG_TO_OFFSET["a"]) 
+                    if mem_byte_val == 0xcc:
+                        print(f"Found interpret_ldm at 0x{interpret_ldm:x}, with identifier: 0x{ldm:x}")
+                        result["instruction"]["ldm"] = ldm
+                        self.binary_loader.symbols["interpret_ldm"] = self.binary_loader.symbols.pop(f"sub_{interpret_ldm:x}")
+                        tmp_result_instruction.pop(interpret_ldm)
+                        return
+            print("\n[!] Warning: Cannot find interpret_ldm")
+
+        def find_interpret_jmp(ins_pos, arg1_pos, arg2_pos):
+            for interpret_jmp, jmp in tmp_result_instruction.items():
+                rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, jmp, 0, result["register"]["b"])
+                init_register = {"b": 0xcc}
+                base_addr = 0x2000000
+                simgr = simulate(interpret_jmp, base_addr, claripy.BVV(rsi_val, 32), init_register, {})
+                if simgr.found:
+                    found_state = simgr.found[0]
+                    mem_byte_val = get_mem_byte_val(found_state, base_addr, REG_TO_OFFSET["i"])
+                    if mem_byte_val == init_register["b"]:
+                        print(f"Found interpret_jmp at 0x{interpret_jmp:x}, with identifier: 0x{jmp:x}")
+                        result["instruction"]["jmp"] = jmp
+                        self.binary_loader.symbols["interpret_jmp"] = self.binary_loader.symbols.pop(f"sub_{interpret_jmp:x}")
+                        tmp_result_instruction.pop(interpret_jmp)
+                        return   
+            print("\n[!] Warning: Cannot find interpret_jmp")
+        
+        def find_interpret_cmp(ins_pos, arg1_pos, arg2_pos):
+            for interpret_cmp, cmp in tmp_result_instruction.items():
+                rsi_val = construct_arg(ins_pos, arg1_pos, arg2_pos, cmp, result["register"]["a"], result["register"]["b"])
+                init_register = {"a": 0, "b": 0xcc}
+                base_addr = 0x2000000
+                simgr = simulate(interpret_cmp, base_addr, claripy.BVV(rsi_val, 32), init_register, {})
+                if simgr.found:
+                    found_state = simgr.found[0]
+                    mem_byte_val = get_mem_byte_val(found_state, base_addr, REG_TO_OFFSET["f"])
+                    if mem_byte_val != 0:
+                        print(f"Found interpret_cmp at 0x{interpret_cmp:x}, with identifier: 0x{cmp:x}")
+                        result["instruction"]["cmp"] = cmp
+                        self.binary_loader.symbols["interpret_cmp"] = self.binary_loader.symbols.pop(f"sub_{interpret_cmp:x}")
+                        tmp_result_instruction.pop(interpret_cmp)
+                        return
+            print("\n[!] Warning: Cannot find interpret_cmp")
+
+        def find_interpret_sys(ins_pos, arg1_pos, arg2_pos):
+            if len(tmp_result_instruction.items()) != 1:
+                print("\n[!] Warning: Cannot find interpret_sys")
+            else:
+                interpret_sys, sys = list(tmp_result_instruction.items())[0]
+                print(f"Found interpret_sys at 0x{interpret_sys:x}, with identifier: 0x{sys:x}")
+                result["instruction"]["sys"] = sys
+                self.binary_loader.symbols["interpret_sys"] = self.binary_loader.symbols.pop(f"sub_{interpret_sys:x}")
+                tmp_result_instruction.pop(interpret_sys)
+
+                        
+        identify_register() 
+        ins_pos = result["opcode-order"].get("ins")
+        arg1_pos = result["opcode-order"].get("arg1")
+        arg2_pos = result["opcode-order"].get("arg2")
+        
+        find_interpret_add(ins_pos, arg1_pos, arg2_pos)
+        find_interpret_stk(ins_pos, arg1_pos, arg2_pos)
+        find_interpret_stm(ins_pos, arg1_pos, arg2_pos)
+        find_interpret_ldm(ins_pos, arg1_pos, arg2_pos)
+        find_interpret_jmp(ins_pos, arg1_pos, arg2_pos)
+        find_interpret_cmp(ins_pos, arg1_pos, arg2_pos)
+        find_interpret_sys(ins_pos, arg1_pos, arg2_pos)
+        
+    def identify_flags(self, result):
+        if result["instruction"].get("cmp") and self.binary_loader.symbols.get("interpret_cmp"):
+            pass
+        else:
+            print("\n[!] Warning: Cannot identify flags")
 
     def run_analysis(self):
         """
@@ -190,11 +348,12 @@ class SymbolicAnalyzerV1(SymbolicAnalyzer):
             "opcode-order": {}
         }
         
-        interpret_funcs = self._get_interpret_funcs()
+        interpret_funcs = self.get_interpret_funcs()
      
         
         
         self.identify_instructions(result, interpret_funcs)
+        self.identify_flags(result)
         print(result["register"])
         print(result["instruction"])
         print(result["opcode-order"])
