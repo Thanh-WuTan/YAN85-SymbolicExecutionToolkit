@@ -2,14 +2,14 @@ import claripy
 import angr
 from src.symbolic_analyzer_base import SymbolicAnalyzer
 OFFSET_TO_REG = {
-        1024: "a",
-        1025: "b",
-        1026: "c",
-        1027: "d",
-        1028: "s",
-        1029: "i",
-        1030: "f"
-    }
+    1024: "a",
+    1025: "b",
+    1026: "c",
+    1027: "d",
+    1028: "s",
+    1029: "i",
+    1030: "f"
+}
 
 REG_TO_OFFSET = {
     "a": 1024,
