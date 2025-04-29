@@ -14,7 +14,9 @@ class SymbolicAnalyzer:
         os.makedirs(output_dir, exist_ok=True)
 
         output_file = os.path.join(output_dir, f"{self.binary_loader.binary_name}.yml")
-
+        register_order = ["a", "b", "c", "d", "i", "s", "f"]
+        if "register" in result:
+            result["register"] = {key: result["register"][key] for key in register_order if key in result["register"]}
         try:
             with open(output_file, "w") as f:
                 yaml.safe_dump(result, f, sort_keys=False, default_flow_style=False)
