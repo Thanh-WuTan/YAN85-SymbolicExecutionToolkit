@@ -7,7 +7,7 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
         super().__init__(binary_loader)
 
     def identify_registers(self, result):
-        print("\n[+] Identifying registers using concrete execution...")
+        print("\n[+] Identifying registers ...")
 
         # Get address of describe_register
         describe_register_addr = self.symbols.get("describe_register")
@@ -70,7 +70,7 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
             print(f"Warning: Only found {len(result["register"])} of {len(char_to_reg)} registers.")
 
     def identify_instructions(self, result):
-        print("\n[+] Identifying instructions using concrete execution...")
+        print("\n[+] Identifying instructions ...")
 
         # Get address of describe_instruction
         describe_instruction_addr = self.symbols.get("describe_instruction")
@@ -141,7 +141,7 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
             print(f"Warning: Only found {len(result["instruction"])} of {len(valid_instructions)} instructions.")
 
     def identify_syscalls(self, result):
-        print("\n[+] Identifying syscall numbers using concrete execution...")
+        print("\n[+] Identifying syscalls ...")
 
         interpret_sys_addr = self.symbols.get("interpret_sys")
         assert(interpret_sys_addr)
@@ -264,7 +264,7 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
             print(f"Warning: Only found {len(result['syscall'])} of {len(syscall_str_map)} syscalls.")
 
     def identify_flags(self, result):
-        print("\n[+] Identifying flags using concrete execution...")
+        print("\n[+] Identifying flags ...")
         describe_flags_addr = self.symbols.get("describe_flags")
         assert(describe_flags_addr)
         edi_values = [0x0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80]
