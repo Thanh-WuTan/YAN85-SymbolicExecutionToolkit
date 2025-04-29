@@ -1,7 +1,5 @@
 import angr
 import claripy
-import os
-import yaml
 from src.symbolic_analyzer_base import SymbolicAnalyzer
 
 class SymbolicAnalyzerV0(SymbolicAnalyzer):
