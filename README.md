@@ -26,7 +26,7 @@ python main.py -h
 ```
 ###  Command-Line Options
 ```plain
-usage: cli.py [-h] [-b BINARY] [-s SHELLCODE] [-i IDENTIFIERS]
+usage: main.py [-h] [-b BINARY] [-s SHELLCODE] [-i IDENTIFIERS]
 
 YAN85 Symbolic Execution Toolkit
 
