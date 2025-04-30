@@ -1,0 +1,35 @@
+opcode-order:
+  ins: 0
+  arg1: 1
+  arg2: 2
+instruction:
+  imm: 1
+  ldm: 2
+  stm: 4
+  cmp: 8
+  jmp: 16
+  stk: 32
+  add: 64
+  sys: 128
+register:
+  a: 16
+  b: 8
+  c: 64
+  d: 2
+  i: 32
+  s: 4
+  f: 1
+flag:
+  '*': 0
+  L: 1
+  G: 2
+  E: 4
+  Z: 8
+  N: 16
+syscall:
+  open: 1
+  read_code: 2
+  sleep: 4
+  exit: 8
+  write: 16
+  read_memory: 32
