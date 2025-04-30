@@ -10,7 +10,7 @@ class SymbolicAnalyzer:
 
         print("\n[+] Saving result to YAML file...")
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(base_dir, "result")
+        output_dir = os.path.join(base_dir, "result", "identifiers")
         os.makedirs(output_dir, exist_ok=True)
 
         output_file = os.path.join(output_dir, f"{self.binary_loader.binary_name}.yml")
