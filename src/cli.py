@@ -3,6 +3,7 @@ import os
 from .binary_loader import BinaryLoader 
 from .symbolic_analyzer_v0 import SymbolicAnalyzerV0
 from .symbolic_analyzer_v1 import SymbolicAnalyzerV1
+from .shellcode_generator import ShellcodeGenerator
 
 def create_analyzer(binary_loader):
     if binary_loader.is_v0:
@@ -30,10 +31,6 @@ def main():
             print(f"Running in Analysis Mode:")
             print(f"  Binary: {args.binary}")
             loader = BinaryLoader(args.binary)
-            
-            # Call symbolic_analyzer to analyze binary
-            loader = BinaryLoader(args.binary)
-
             analyzer = create_analyzer(loader)
             analyzer.run_analysis()
         elif args.shellcode and args.identifiers and not args.binary:
@@ -45,7 +42,8 @@ def main():
             print(f"Running in Generation Mode:")
             print(f"  Shellcode: {args.shellcode}")
             print(f"  Identifiers File: {args.identifiers}")
-            # TODO: Call shellcode_generator with args.identifiers and args.shellcode
+            generator = ShellcodeGenerator(args.shellcode, args.identifiers, None)
+            generator.generate_shellcode()
         elif args.binary and args.shellcode and not args.identifiers:
             # Analysis + Generation Mode: -b and -s
             if not os.path.isfile(args.shellcode):
@@ -54,8 +52,10 @@ def main():
             print(f"  Binary: {args.binary}")
             print(f"  Shellcode: {args.shellcode}")
             loader = BinaryLoader(args.binary)
-            loader.print_symbols()
-            # TODO: Call symbolic_analyzer and shellcode_generator
+            analyzer = create_analyzer(loader)
+            analyzer.run_analysis()
+            generator = ShellcodeGenerator(args.shellcode, analyzer.saved_identifiers_file, loader.binary_name)
+            generator.generate_shellcode()
         else:
             # Invalid combinations (e.g., -i without -s, no arguments, etc.)
             raise ValueError("Invalid arguments. Use:\n"

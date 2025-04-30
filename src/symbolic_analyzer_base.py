@@ -3,6 +3,7 @@ class SymbolicAnalyzer:
         self.binary_loader = binary_loader
         self.project = binary_loader.project
         self.symbols = binary_loader.symbols
+        self.saved_identifiers_file = None
 
     def save_result(self, result):
         import os
@@ -10,7 +11,7 @@ class SymbolicAnalyzer:
 
         print("\n[+] Saving result to YAML file...")
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        output_dir = os.path.join(base_dir, "result")
+        output_dir = os.path.join(base_dir, "result", "identifiers")
         os.makedirs(output_dir, exist_ok=True)
 
         output_file = os.path.join(output_dir, f"{self.binary_loader.binary_name}.yml")
@@ -20,6 +21,7 @@ class SymbolicAnalyzer:
         try:
             with open(output_file, "w") as f:
                 yaml.safe_dump(result, f, sort_keys=False, default_flow_style=False)
+            self.saved_identifiers_file = output_file
             print(f"[+] Result saved to {output_file}")
         except Exception as e:
             print(f"[!] Error writing result to {output_file}: {e}")

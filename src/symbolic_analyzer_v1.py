@@ -430,11 +430,11 @@ class SymbolicAnalyzerV1(SymbolicAnalyzer):
 
     def run_analysis(self):
         result = {
+            "opcode-order": {},
             "register": {},
             "instruction": {},
             "syscall": {},
             "flag": {},
-            "opcode-order": {}
         }
         
         
