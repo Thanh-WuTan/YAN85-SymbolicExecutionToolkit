@@ -67,7 +67,7 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
         if not result["register"]:
             print("Error: No register identifiers found.")
         elif len(result["register"]) < len(char_to_reg):
-            print(f"Warning: Only found {len(result["register"])} of {len(char_to_reg)} registers.")
+            print(f"Warning: Only found {len(result['register'])} of {len(char_to_reg)} registers.")
 
     def identify_instructions(self, result):
         print("\n[+] Identifying instructions ...")
@@ -138,7 +138,7 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
         if not result["instruction"]:
             print("Error: No instruction identifiers found.")
         elif len(result["instruction"]) < len(valid_instructions):
-            print(f"Warning: Only found {len(result["instruction"])} of {len(valid_instructions)} instructions.")
+            print(f"Warning: Only found {len(result['instruction'])} of {len(valid_instructions)} instructions.")
 
     def identify_syscalls(self, result):
         print("\n[+] Identifying syscalls ...")
