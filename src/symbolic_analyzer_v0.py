@@ -321,5 +321,5 @@ class SymbolicAnalyzerV0(SymbolicAnalyzer):
         self.identify_instructions(result)
         self.identify_syscalls(result)
         self.identify_flags(result)
-
+        result["opcode-order"]["arg2"] = 3 - result["opcode-order"]["arg1"] - result["opcode-order"]["ins"]
         self.save_result(result)
