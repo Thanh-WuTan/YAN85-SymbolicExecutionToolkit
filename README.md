@@ -1,5 +1,10 @@
 # YAN85-SymbolicExecutionToolkit
-A Python-based toolkit for symbolic execution and shellcode generation for YAN85 binaries. This project provides tools to analyze YAN85 binaries using symbolic execution and generate shellcode based on analysis results or pre-saved identifiers.
+
+**YAN85-SymbolicExecutionToolkit** is a Python-based tool designed specifically for symbolic execution and shellcode generation in **YAN85-based challenges on [pwn.college](https://pwn.college)**.
+
+This toolkit automates the analysis of YAN85 binaries by identifying instructions, registers, and syscalls through symbolic execution. It also enables users to convert human-readable shellcode into YAN85 shellcode using previously extracted identifiers, making the reverse engineering process more efficient.
+
+> **Disclaimer**: Reversing YAN85 binaries is a practice space for improving reverse engineering skills. Use this tool only if you find manually identifying YAN85 opcodes tedious.
 
 ## Setup
 
