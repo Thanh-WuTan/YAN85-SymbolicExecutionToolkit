@@ -104,6 +104,8 @@ class ShellcodeGenerator:
                         raise ValueError(f"Invalid register '{opcodes[1]}' in shellcode. Must be one of {list(self.identifiers['register'].keys())}")
                     if not opcodes[2].isdigit():
                         raise ValueError(f"Invalid immediate value '{opcodes[2]}' in shellcode. Must be a number")
+                    if int(opcodes[2]) < 0 or int(opcodes[2]) > 255:
+                        raise ValueError(f"Immediate value '{opcodes[2]}' out of range (0-255) in shellcode")
                 elif opcodes[0] == "sys":
                     if opcodes[1] not in self.identifiers["syscall"]:
                         raise ValueError(f"Invalid syscall '{opcodes[1]}' in shellcode. Must be one of {list(self.identifiers['syscall'].keys())}")
